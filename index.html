@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chuck Yeager's Air Combat — Rebuild</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Share+Tech+Mono&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink: #e8dcc4;
+      --amber: #d4a017;
+      --olive: #3d4a2a;
+      --blood: #8b1e1e;
+      --panel: rgba(10, 12, 8, 0.82);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0c08; color: var(--ink); font-family: "IBM Plex Sans", system-ui, sans-serif; }
+    canvas { display: block; width: 100%; height: 100%; }
+    #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+    .hud-corner {
+      position: absolute;
+      font-family: "Share Tech Mono", monospace;
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      text-shadow: 0 1px 2px #000;
+      line-height: 1.55;
+    }
+    #hud-tl { top: 18px; left: 22px; }
+    #hud-tr { top: 18px; right: 22px; text-align: right; }
+    #hud-bl { bottom: 22px; left: 22px; }
+    #hud-br { bottom: 22px; right: 22px; text-align: right; }
+    .label { color: #9aa07a; font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; }
+    .val { color: var(--ink); font-size: 18px; }
+    .amber { color: var(--amber); }
+    .warn { color: #e35a3a; }
+    #crosshair {
+      position: absolute; left: 50%; top: 50%; width: 54px; height: 54px;
+      transform: translate(-50%, -50%);
+    }
+    #crosshair svg { width: 100%; height: 100%; opacity: 0.85; }
+    #lead { position: absolute; width: 10px; height: 10px; border: 1px solid #e35a3a; border-radius: 50%; transform: translate(-50%, -50%); display: none; }
+    #pip { position: absolute; width: 6px; height: 6px; background: var(--amber); border-radius: 50%; transform: translate(-50%, -50%); opacity: 0.9; }
+    #yeager {
+      position: absolute; left: 50%; bottom: 86px; transform: translateX(-50%);
+      max-width: 640px; text-align: center; font-family: "Share Tech Mono", monospace;
+      font-size: 13px; color: var(--amber); letter-spacing: 0.04em;
+      text-shadow: 0 2px 8px #000; opacity: 0; transition: opacity 0.3s;
+    }
+    #killfeed {
+      position: absolute; top: 80px; right: 22px; text-align: right;
+      font-family: "Share Tech Mono", monospace; font-size: 12px; color: #f0e6c8;
+    }
+    #killfeed div { margin-bottom: 4px; opacity: 0.9; }
+    .overlay {
+      position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center;
+      background:
+        radial-gradient(ellipse at 50% 20%, rgba(80, 70, 30, 0.25), transparent 55%),
+        linear-gradient(180deg, #12150e 0%, #0a0c08 100%);
+    }
+    .overlay.hidden { display: none; }
+    .card {
+      width: min(720px, 92vw);
+      border: 1px solid #5a5234;
+      background: linear-gradient(180deg, rgba(22, 24, 16, 0.95), rgba(12, 14, 10, 0.96));
+      padding: 36px 40px 32px;
+      box-shadow: 0 30px 80px rgba(0,0,0,0.55);
+    }
+    .kicker { font-family: "Share Tech Mono", monospace; font-size: 11px; letter-spacing: 0.28em; color: var(--amber); text-transform: uppercase; }
+    h1 { font-family: "Bebas Neue", sans-serif; font-size: clamp(42px, 8vw, 72px); line-height: 0.9; letter-spacing: 0.02em; margin: 10px 0 8px; color: #f3ead2; }
+    h1 span { display: block; font-size: 0.42em; letter-spacing: 0.18em; color: #b7ad8a; margin-top: 6px; }
+    .meta { font-family: "Share Tech Mono", monospace; font-size: 12px; color: #9aa07a; margin-bottom: 22px; }
+    p.body { font-size: 15px; line-height: 1.6; color: #d8d0b8; margin-bottom: 16px; }
+    .quote { border-left: 2px solid var(--amber); padding-left: 14px; color: #cfc6a8; font-style: italic; margin: 18px 0 22px; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+    button.cta {
+      pointer-events: auto;
+      background: var(--amber); color: #1a1406; border: 0; padding: 12px 22px;
+      font-family: "Bebas Neue", sans-serif; font-size: 22px; letter-spacing: 0.08em; cursor: pointer;
+    }
+    button.ghost {
+      pointer-events: auto;
+      background: transparent; color: var(--ink); border: 1px solid #6a6244; padding: 11px 18px;
+      font-family: "Share Tech Mono", monospace; font-size: 12px; letter-spacing: 0.12em; cursor: pointer;
+    }
+    button.cta:hover { filter: brightness(1.08); }
+    button.ghost:hover { border-color: var(--amber); color: var(--amber); }
+    .controls { margin-top: 20px; font-family: "Share Tech Mono", monospace; font-size: 11px; color: #8e886c; line-height: 1.7; }
+    .controls b { color: #d8d0b8; }
+    .statgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 24px; margin: 18px 0 22px; font-family: "Share Tech Mono", monospace; font-size: 13px; }
+    .statgrid span { color: #8e886c; display: block; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; }
+    #damage-vignette {
+      position: fixed; inset: 0; pointer-events: none; z-index: 6;
+      box-shadow: inset 0 0 120px rgba(140, 20, 10, 0);
+      transition: box-shadow 0.2s;
+    }
+  </style>
+</head>
+<body>
+  <div id="hud">
+    <div id="hud-tl" class="hud-corner">
+      <div class="label">Aircraft</div>
+      <div class="val">P-51D MUSTANG</div>
+      <div>“GLAMOROUS GLEN III”</div>
+    </div>
+    <div id="hud-tr" class="hud-corner">
+      <div class="label">Kills / Objective</div>
+      <div class="val amber" id="kills">0 / 5</div>
+      <div id="bandits">BANDITS 5</div>
+    </div>
+    <div id="hud-bl" class="hud-corner">
+      <div><span class="label">IAS</span> <span class="val" id="ias">280</span> KTS</div>
+      <div><span class="label">ALT</span> <span class="val" id="alt">8500</span> FT</div>
+      <div><span class="label">HDG</span> <span class="val" id="hdg">090</span>°</div>
+    </div>
+    <div id="hud-br" class="hud-corner">
+      <div><span class="label">THROTTLE</span> <span class="val" id="thr">85%</span></div>
+      <div><span class="label">AMMO</span> <span class="val" id="ammo">1880</span></div>
+      <div><span class="label">G</span> <span class="val" id="gread">1.0</span></div>
+    </div>
+    <div id="crosshair">
+      <svg viewBox="0 0 54 54" fill="none">
+        <circle cx="27" cy="27" r="16" stroke="#e8dcc4" stroke-width="1" opacity="0.55"/>
+        <path d="M27 8 V16 M27 38 V46 M8 27 H16 M38 27 H46" stroke="#e8dcc4" stroke-width="1.2"/>
+        <circle cx="27" cy="27" r="1.6" fill="#d4a017"/>
+      </svg>
+    </div>
+    <div id="lead"></div>
+    <div id="pip"></div>
+    <div id="yeager"></div>
+    <div id="killfeed"></div>
+  </div>
+  <div id="damage-vignette"></div>
+
+  <div id="title" class="overlay">
+    <div class="card">
+      <div class="kicker">Electronic Arts · 1991 · Spiritual Rebuild 2026</div>
+      <h1>CHUCK YEAGER’S<span>AIR COMBAT</span></h1>
+      <div class="meta">HISTORICAL FLIGHT · EUROPEAN THEATER · 12 OCTOBER 1944</div>
+      <p class="body">A browser rebuild of Brent Iverson’s classic: action dogfighting with a readable flight model, Yeager on the radio, and the mission that made him an ace in a day.</p>
+      <p class="quote">“It’s a great day for flying.” — Brig. Gen. Charles E. Yeager</p>
+      <div class="row">
+        <button class="cta" id="btn-brief">OPEN BRIEFING</button>
+        <button class="ghost" id="btn-free">FREE FLIGHT</button>
+      </div>
+      <div class="controls">
+        <b>Pitch/Roll</b> WASD or arrows · <b>Rudder</b> Q E · <b>Throttle</b> R / F · <b>Guns</b> Space<br>
+        <b>Camera</b> C · <b>Padlock nearest</b> T · <b>Pause</b> Esc
+      </div>
+    </div>
+  </div>
+
+  <div id="brief" class="overlay hidden">
+    <div class="card">
+      <div class="kicker">363rd Fighter Squadron · 357th Fighter Group</div>
+      <h1 style="font-size:48px">ACE IN A DAY</h1>
+      <div class="meta">PILOT: CAPT. CHARLES E. YEAGER · P-51D MUSTANG · NEAR DUMMER LAKE</div>
+      <p class="body">Escort is off. A gaggle of Bf 109s bounced the bombers. Yeager rolled in and destroyed five in a single engagement — two of them without firing a shot after they collided evading him.</p>
+      <p class="body">Your job: put five 109s in the grass. Stay fast. Check six. Don’t bleed energy in a turning fight you can’t win.</p>
+      <p class="quote">“The first time I saw a jet, I shot it down.” He didn’t need a jet today. Just eyes and a Mustang.</p>
+      <div class="row">
+        <button class="cta" id="btn-scramble">SCRAMBLE</button>
+        <button class="ghost" id="btn-back">BACK</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="pause" class="overlay hidden">
+    <div class="card">
+      <div class="kicker">Paused</div>
+      <h1 style="font-size:48px">HOLD</h1>
+      <p class="body">Throttle frozen. Bandits waiting.</p>
+      <div class="row">
+        <button class="cta" id="btn-resume">RESUME</button>
+        <button class="ghost" id="btn-menu">ABORT TO MENU</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="debrief" class="overlay hidden">
+    <div class="card">
+      <div class="kicker" id="debrief-kicker">Mission complete</div>
+      <h1 style="font-size:52px" id="debrief-title">ACE</h1>
+      <div class="statgrid">
+        <div><span>Kills</span><b id="db-kills">0</b></div>
+        <div><span>Time</span><b id="db-time">0:00</b></div>
+        <div><span>Ammo remaining</span><b id="db-ammo">0</b></div>
+        <div><span>Damage taken</span><b id="db-dmg">0%</b></div>
+      </div>
+      <p class="quote" id="debrief-quote"></p>
+      <div class="row">
+        <button class="cta" id="btn-again">FLY IT AGAIN</button>
+        <button class="ghost" id="btn-home">MAIN MENU</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="importmap">
+    { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+  </script>
+  <script type="module" src="./game.js"></script>
+</body>
+</html>
